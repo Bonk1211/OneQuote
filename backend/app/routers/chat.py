@@ -162,7 +162,7 @@ async def chat_quote(
                 ),
                 "is_profitable": profit_analysis.is_profitable,
                 "ai_conversation_id": conversation_id,
-                "ai_model_used": "gpt-4o",
+                "ai_model_used": "gemini-2.5-flash",
                 "ai_raw_response": parsed,
                 "content_hash": content_hash,
                 "status": "draft",

@@ -1,11 +1,12 @@
 import json
 import re
 
-from openai import AsyncOpenAI
+from google import genai
+from google.genai import types
 
 from app.config import settings
 
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+client = genai.Client(api_key=settings.gemini_api_key)
 
 SYSTEM_PROMPT = """You are QuoteGuard AI, a quoting assistant for solo contractors and tradespeople.
 Your job is to help the user create accurate, profitable quotes from unstructured project descriptions.
@@ -96,17 +97,17 @@ async def generate_quote_from_chat(
         currency_code=currency,
     )
 
-    response = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message},
-        ],
-        temperature=0.3,
-        max_tokens=2000,
+    response = await client.aio.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=message,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0.3,
+            max_output_tokens=2000,
+        ),
     )
 
-    return response.choices[0].message.content or ""
+    return response.text or ""
 
 
 def parse_llm_json(llm_response: str) -> dict | None:

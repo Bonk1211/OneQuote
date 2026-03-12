@@ -11,11 +11,9 @@ help: ## Show this help
 
 # ── Setup ──
 
-env: ## Copy .env.example to .env and frontend/.env.local
+env: ## Copy .env.example to .env
 	@test -f .env || (cp .env.example .env && echo "Created .env")
-	@test -f frontend/.env.local || (cp frontend/.env.local.example frontend/.env.local && echo "Created frontend/.env.local")
-	@test -f backend/.env || (cp backend/.env.example backend/.env && echo "Created backend/.env")
-	@echo "Edit .env files with your keys before running services."
+	@echo "Edit .env with your keys before running services."
 
 install: ## Install all dependencies
 	cd frontend && npm install
