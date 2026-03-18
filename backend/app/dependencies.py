@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from supabase import create_client, Client
 
 from app.config import settings
+from app.utils.supabase_helpers import safe_maybe_single
 
 
 @dataclass
@@ -42,12 +43,11 @@ async def get_current_user(
         raise HTTPException(401, "Invalid wallet address")
 
     # Look up existing user
-    resp = (
+    resp = safe_maybe_single(
         supabase.table("users")
         .select("id, onechain_address")
         .eq("onechain_address", wallet_address)
         .maybe_single()
-        .execute()
     )
 
     if resp.data:

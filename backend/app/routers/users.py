@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.dependencies import get_current_user, get_supabase
+from app.utils.supabase_helpers import safe_maybe_single
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -19,12 +20,11 @@ class UserProfileUpdate(BaseModel):
 async def get_profile(
     user=Depends(get_current_user), supabase=Depends(get_supabase)
 ):
-    resp = (
+    resp = safe_maybe_single(
         supabase.table("users")
         .select("*")
         .eq("id", str(user.id))
         .maybe_single()
-        .execute()
     )
     return resp.data or {"id": user.id, "onechain_address": user.onechain_address}
 

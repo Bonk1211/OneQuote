@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from app.dependencies import get_current_user, get_supabase
 from app.models.quote import QuoteUpdate
 from app.services.pdf_generator import generate_quote_pdf, upload_quote_pdf
+from app.utils.supabase_helpers import safe_maybe_single
 
 logger = logging.getLogger(__name__)
 
@@ -146,21 +147,19 @@ async def download_quote_pdf(
     milestones = milestones_resp.data or []
 
     # 4. Fetch business info
-    user_resp = (
+    user_resp = safe_maybe_single(
         supabase.table("users")
         .select("business_name, email, phone, currency_code")
         .eq("id", str(user.id))
         .maybe_single()
-        .execute()
     )
     user_data = user_resp.data or {}
 
-    overheads_resp = (
+    overheads_resp = safe_maybe_single(
         supabase.table("base_overheads")
         .select("vat_rate, vat_registered")
         .eq("user_id", str(user.id))
         .maybe_single()
-        .execute()
     )
     overheads = overheads_resp.data or {}
 

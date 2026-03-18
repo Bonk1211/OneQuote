@@ -8,6 +8,7 @@ from app.dependencies import get_current_user, get_supabase
 from app.models.chat import ChatRequest, ChatResponse, ParsedQuote
 from app.services.ai_quoting import generate_quote_from_chat, parse_llm_json
 from app.services.profitability import calculate_profitability
+from app.utils.supabase_helpers import safe_maybe_single
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -19,12 +20,11 @@ async def chat_quote(
     supabase=Depends(get_supabase),
 ):
     # 1. Fetch overheads
-    overheads_resp = (
+    overheads_resp = safe_maybe_single(
         supabase.table("base_overheads")
         .select("*")
         .eq("user_id", str(user.id))
         .maybe_single()
-        .execute()
     )
     if not overheads_resp.data:
         raise HTTPException(400, "Please set up your business overheads first.")

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_current_user, get_supabase
 from app.models.overhead import OverheadUpdate
+from app.utils.supabase_helpers import safe_maybe_single
 
 router = APIRouter(prefix="/api/overheads", tags=["overheads"])
 
@@ -10,12 +11,11 @@ router = APIRouter(prefix="/api/overheads", tags=["overheads"])
 async def get_overheads(
     user=Depends(get_current_user), supabase=Depends(get_supabase)
 ):
-    resp = (
+    resp = safe_maybe_single(
         supabase.table("base_overheads")
         .select("*")
         .eq("user_id", str(user.id))
         .maybe_single()
-        .execute()
     )
     return resp.data or {}
 

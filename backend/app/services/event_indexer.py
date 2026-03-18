@@ -38,14 +38,17 @@ EVENT_TYPES: dict[str, str] = {
 
 def _load_cursor(supabase: Any, event_key: str) -> Optional[dict]:
     """Load the last-seen cursor for an event type from the DB."""
-    resp = (
-        supabase.table("indexer_cursors")
-        .select("cursor_data")
-        .eq("event_key", event_key)
-        .maybe_single()
-        .execute()
-    )
-    if resp.data and resp.data.get("cursor_data"):
+    try:
+        resp = (
+            supabase.table("indexer_cursors")
+            .select("cursor_data")
+            .eq("event_key", event_key)
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return None
+    if resp is not None and resp.data and resp.data.get("cursor_data"):
         return resp.data["cursor_data"]
     return None
 
@@ -78,15 +81,18 @@ def _insert_event(supabase: Any, event: dict, event_key: str) -> bool:
     parsed = event.get("parsedJson", {})
 
     # Check for existing record
-    existing = (
-        supabase.table("escrow_events")
-        .select("id")
-        .eq("tx_digest", tx_digest)
-        .eq("event_seq", event_seq)
-        .maybe_single()
-        .execute()
-    )
-    if existing.data:
+    try:
+        existing = (
+            supabase.table("escrow_events")
+            .select("id")
+            .eq("tx_digest", tx_digest)
+            .eq("event_seq", event_seq)
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        existing = None
+    if existing is not None and existing.data:
         return False
 
     supabase.table("escrow_events").insert(
