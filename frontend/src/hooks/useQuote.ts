@@ -121,8 +121,9 @@ export function useDownloadQuotePdf(id: string) {
 
   const download = async () => {
     if (!account?.address) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/quotes/${id}/pdf`,
+      `${apiUrl}/api/quotes/${id}/pdf`,
       { headers: { Authorization: `Bearer ${account.address}` } }
     );
     if (!res.ok) throw new Error("PDF download failed");

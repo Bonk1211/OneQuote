@@ -78,6 +78,12 @@ make env              # Creates .env files from .env.example templates
 - RLS policies exist but backend bypasses them via service role key.
 - Realtime enabled on `milestones`, `projects`, `escrow_events`.
 
+## Sui SDK Reference
+Every `@mysten/*` package ships LLM documentation in its `docs/` directory. When working with these
+packages, find the relevant docs by looking for `docs/llms-index.md` files inside
+`frontend/node_modules/@mysten/*/`. Read the index first to find the page you need, then read that page for
+details.
+
 ## Key Conventions
 
 - **Path alias**: Frontend uses `@/*` → `./src/*`.

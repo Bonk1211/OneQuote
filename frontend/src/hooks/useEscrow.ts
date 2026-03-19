@@ -1,16 +1,36 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useCurrentAccount } from "@mysten/dapp-kit";
-import { requestSignAndSubmit } from "@/lib/onechain/sponsored";
-import type { SponsoredTxResult } from "@/types/escrow";
+import {
+  useCurrentAccount,
+  useSignAndExecuteTransaction,
+  useSuiClient,
+} from "@mysten/dapp-kit";
+import type { Transaction } from "@mysten/sui/transactions";
+import {
+  buildCreateEscrow,
+  buildFundMilestone,
+  buildRequestRelease,
+  buildReleaseMilestone,
+  buildDisputeMilestone,
+  buildCancelEscrow,
+  type CreateEscrowParams,
+  type FundMilestoneParams,
+  type MilestoneActionParams,
+  type CancelEscrowParams,
+} from "@/lib/onechain/transactions";
+
+interface TxResult {
+  digest: string;
+}
 
 interface UseEscrowReturn {
-  createEscrow: (projectId: string) => Promise<SponsoredTxResult>;
-  fundMilestone: (escrowObjectId: string, milestoneIndex: number) => Promise<SponsoredTxResult>;
-  requestRelease: (escrowObjectId: string, milestoneIndex: number) => Promise<SponsoredTxResult>;
-  releaseMilestone: (escrowObjectId: string, milestoneIndex: number) => Promise<SponsoredTxResult>;
-  disputeMilestone: (escrowObjectId: string, milestoneIndex: number) => Promise<SponsoredTxResult>;
+  createEscrow: (params: CreateEscrowParams) => Promise<TxResult>;
+  fundMilestone: (params: FundMilestoneParams) => Promise<TxResult>;
+  requestRelease: (params: MilestoneActionParams) => Promise<TxResult>;
+  releaseMilestone: (params: MilestoneActionParams) => Promise<TxResult>;
+  disputeMilestone: (params: MilestoneActionParams) => Promise<TxResult>;
+  cancelEscrow: (params: CancelEscrowParams) => Promise<TxResult>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
@@ -20,14 +40,24 @@ export function useEscrow(): UseEscrowReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const account = useCurrentAccount();
+  const client = useSuiClient();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction({
+    execute: async ({ bytes, signature }) =>
+      await client.executeTransactionBlock({
+        transactionBlock: bytes,
+        signature,
+        options: {
+          showRawEffects: true,
+          showObjectChanges: true,
+          showEvents: true,
+        },
+      }),
+  });
 
   const clearError = useCallback(() => setError(null), []);
 
   const execute = useCallback(
-    async (
-      endpoint: string,
-      body: Record<string, unknown>
-    ): Promise<SponsoredTxResult> => {
+    async (tx: Transaction): Promise<TxResult> => {
       if (!account?.address) {
         throw new Error("Wallet not connected. Please connect your wallet first.");
       }
@@ -36,17 +66,15 @@ export function useEscrow(): UseEscrowReturn {
       setError(null);
 
       try {
-        const result = await requestSignAndSubmit(
-          endpoint,
-          body,
-          account.address
-        );
+        const result = await signAndExecute({ transaction: tx });
 
-        if (result.effects.status.status !== "success") {
-          throw new Error("Transaction failed on-chain. Please try again.");
+        if (result.effects?.status?.status !== "success") {
+          throw new Error(
+            `Transaction failed on-chain: ${result.effects?.status?.error ?? "unknown error"}`
+          );
         }
 
-        return result;
+        return { digest: result.digest };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "An unknown error occurred";
@@ -56,48 +84,36 @@ export function useEscrow(): UseEscrowReturn {
         setIsLoading(false);
       }
     },
-    [account?.address]
+    [account?.address, signAndExecute]
   );
 
   const createEscrow = useCallback(
-    (projectId: string) =>
-      execute("/api/escrow/create", { project_id: projectId }),
+    (params: CreateEscrowParams) => execute(buildCreateEscrow(params)),
     [execute]
   );
 
   const fundMilestone = useCallback(
-    (escrowObjectId: string, milestoneIndex: number) =>
-      execute("/api/escrow/fund", {
-        escrow_object_id: escrowObjectId,
-        milestone_index: milestoneIndex,
-      }),
+    (params: FundMilestoneParams) => execute(buildFundMilestone(params)),
     [execute]
   );
 
   const requestRelease = useCallback(
-    (escrowObjectId: string, milestoneIndex: number) =>
-      execute("/api/escrow/request-release", {
-        escrow_object_id: escrowObjectId,
-        milestone_index: milestoneIndex,
-      }),
+    (params: MilestoneActionParams) => execute(buildRequestRelease(params)),
     [execute]
   );
 
   const releaseMilestone = useCallback(
-    (escrowObjectId: string, milestoneIndex: number) =>
-      execute("/api/escrow/release", {
-        escrow_object_id: escrowObjectId,
-        milestone_index: milestoneIndex,
-      }),
+    (params: MilestoneActionParams) => execute(buildReleaseMilestone(params)),
     [execute]
   );
 
   const disputeMilestone = useCallback(
-    (escrowObjectId: string, milestoneIndex: number) =>
-      execute("/api/escrow/dispute", {
-        escrow_object_id: escrowObjectId,
-        milestone_index: milestoneIndex,
-      }),
+    (params: MilestoneActionParams) => execute(buildDisputeMilestone(params)),
+    [execute]
+  );
+
+  const cancelEscrow = useCallback(
+    (params: CancelEscrowParams) => execute(buildCancelEscrow(params)),
     [execute]
   );
 
@@ -107,6 +123,7 @@ export function useEscrow(): UseEscrowReturn {
     requestRelease,
     releaseMilestone,
     disputeMilestone,
+    cancelEscrow,
     isLoading,
     error,
     clearError,

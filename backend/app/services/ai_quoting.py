@@ -1,10 +1,14 @@
 import json
+import logging
 import re
 
 from google import genai
 from google.genai import types
 
 from app.config import settings
+from app.services.market_rates import search_market_rates
+
+logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.gemini_api_key)
 
@@ -69,8 +73,8 @@ When you need more information, respond with:
 ```json
 {{
   "status": "needs_clarification",
-  "message": "<your conversational message with numbered questions>",
-  "questions": ["<question 1>", "<question 2>"]
+  "message": "<short conversational intro, e.g. 'Thanks! To give you an accurate quote, I need a few more details:'>",
+  "questions": ["How many rooms need to be painted?", "Do you need us to supply the paint or will you provide it?"]
 }}
 ```
 
@@ -83,8 +87,11 @@ When you need more information, respond with:
 - Be conservative with time estimates; add 15% buffer for contingencies.
 - Include travel time if location is specified.
 - NEVER output anything except valid JSON in code fences when generating a quote. Do NOT add any text before or after the JSON code fence.
-- When asking follow-up questions, ALWAYS present them as a clear numbered list so the user can answer each one.
+- When asking follow-up questions, put EVERY question in the "questions" array. The "message" field should ONLY contain a short intro sentence — NEVER put questions inside "message". The system will auto-number them for the user.
 - IMPORTANT: When you are ready to generate a quote, your ENTIRE response must be ONLY the ```json``` code block. No preamble text, no explanation — just the JSON.
+
+## MARKET RATE DATA
+{market_rates_context}
 """
 
 
@@ -113,9 +120,23 @@ async def generate_quote_from_chat(
     conversation_history: list[dict] | None = None,
 ) -> str:
     overhead_context = build_overhead_context(overheads, currency)
+
+    # Search for current market rates based on the user's message
+    market_context = await search_market_rates(message, currency)
+    if market_context:
+        market_rates_block = (
+            "The following real-time market rate data was retrieved from the web. "
+            "Use this to validate and inform your pricing — but still apply the user's "
+            "overheads and profit margin on top.\n\n" + market_context
+        )
+        logger.info("Market rate context found for conversation %s", conversation_id)
+    else:
+        market_rates_block = "No market rate data available for this query. Use your best judgement based on industry knowledge."
+
     system_prompt = SYSTEM_PROMPT.format(
         overhead_context=overhead_context,
         currency_code=currency,
+        market_rates_context=market_rates_block,
     )
 
     # Build conversation contents for Gemini
@@ -129,7 +150,7 @@ async def generate_quote_from_chat(
     contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
 
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-pro-preview",
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,

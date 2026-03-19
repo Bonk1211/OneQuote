@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send } from "lucide-react";
 import { useChat } from "@/hooks/useChat";
 import { MessageBubble } from "./MessageBubble";
 import { QuoteSuggestion } from "./QuoteSuggestion";
+import { ThinkingProcess } from "./ThinkingProcess";
 
 interface Props {
   onQuoteAccepted?: (conversationId: string) => void;
@@ -12,13 +13,17 @@ interface Props {
 }
 
 export function ChatInterface({ onQuoteAccepted, resumeConversationId }: Props) {
-  const { messages, isLoading, conversationId, latestQuote, sendMessage, loadConversation, reset } = useChat();
+  const { messages, isLoading, aiState, conversationId, latestQuote, sendMessage, loadConversation, reset } = useChat();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiState]);
 
   // Load existing conversation or reset for a fresh one
   useEffect(() => {
@@ -71,12 +76,7 @@ export function ChatInterface({ onQuoteAccepted, resumeConversationId }: Props) 
           </div>
         ))}
 
-        {isLoading && (
-          <div className="flex items-center gap-2 text-zinc-400">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Analyzing your project...</span>
-          </div>
-        )}
+        <ThinkingProcess aiState={aiState} />
         <div ref={messagesEndRef} />
       </div>
 

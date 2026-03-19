@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
     gemini_api_key: str
+    tavily_api_key: str = ""
     onechain_rpc_url: str = "https://rpc.onechain.io"
     escrow_package_id: str = ""
     usdc_type: str = ""

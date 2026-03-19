@@ -5,9 +5,20 @@ import { useCurrentAccount } from "@mysten/dapp-kit";
 import { apiFetch } from "@/lib/api";
 import type { ChatMessage, ChatApiResponse, Conversation, ConversationDetail } from "@/types/quote";
 
+export type AIState =
+  | "idle"
+  | "checking_sources"
+  | "loading_context"
+  | "thinking"
+  | "parsing"
+  | "profitability"
+  | "saving"
+  | "error";
+
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [aiState, setAiState] = useState<AIState>("idle");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [latestQuote, setLatestQuote] = useState<ChatApiResponse | null>(null);
   const account = useCurrentAccount();
@@ -24,37 +35,104 @@ export function useChat() {
       };
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
+      setAiState("checking_sources");
 
       try {
-        const response = await apiFetch<ChatApiResponse>("/api/chat/quote", {
-          method: "POST",
-          token: account.address,
-          body: JSON.stringify({
-            message: content,
-            conversation_id: conversationId,
-          }),
-        });
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const res = await fetch(
+          `${apiUrl}/api/chat/quote`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${account.address}`,
+            },
+            body: JSON.stringify({
+              message: content,
+              conversation_id: conversationId,
+            }),
+          }
+        );
 
-        // If this is a new conversation (first message), notify sidebar to refresh
-        if (!conversationId && response.conversation_id) {
-          window.dispatchEvent(new CustomEvent("conversation-created"));
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || `Request failed (${res.status})`);
         }
-        setConversationId(response.conversation_id);
 
-        if (response.parsed_quote) {
-          setLatestQuote(response);
+        // Parse SSE stream
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE events (separated by double newline)
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || ""; // Keep incomplete event in buffer
+
+          for (const event of events) {
+            if (!event.trim()) continue;
+
+            const lines = event.split("\n");
+            let eventType = "";
+            let eventData = "";
+
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7);
+              } else if (line.startsWith("data: ")) {
+                eventData = line.slice(6);
+              }
+            }
+
+            if (!eventType || !eventData) continue;
+
+            try {
+              const data = JSON.parse(eventData);
+
+              if (eventType === "ai_state") {
+                setAiState(data.state as AIState);
+              } else if (eventType === "response") {
+                const response = data as ChatApiResponse;
+
+                if (!conversationId && response.conversation_id) {
+                  window.dispatchEvent(new CustomEvent("conversation-created"));
+                }
+                setConversationId(response.conversation_id);
+
+                if (response.parsed_quote) {
+                  setLatestQuote(response);
+                }
+
+                const aiMessage: ChatMessage = {
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: response.message,
+                  parsedQuote: response.parsed_quote,
+                  profitAnalysis: response.profit_analysis,
+                  timestamp: new Date(),
+                };
+                setMessages((prev) => [...prev, aiMessage]);
+              } else if (eventType === "error") {
+                throw new Error(data.message || "Something went wrong");
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== "Something went wrong") {
+                // JSON parse error — skip this event
+              } else {
+                throw parseErr;
+              }
+            }
+          }
         }
-
-        const aiMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.message,
-          parsedQuote: response.parsed_quote,
-          profitAnalysis: response.profit_analysis,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, aiMessage]);
       } catch (error) {
+        setAiState("error");
         const errorMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -67,6 +145,7 @@ export function useChat() {
         setMessages((prev) => [...prev, errorMessage]);
       } finally {
         setIsLoading(false);
+        setAiState("idle");
       }
     },
     [account?.address, conversationId]
@@ -92,7 +171,6 @@ export function useChat() {
             timestamp: new Date(m.created_at),
           }))
         );
-        // Set latest quote from last message that has one
         const lastQuoteMsg = [...data.messages].reverse().find((m) => m.parsed_quote);
         if (lastQuoteMsg) {
           setLatestQuote({
@@ -117,9 +195,10 @@ export function useChat() {
     setMessages([]);
     setConversationId(null);
     setLatestQuote(null);
+    setAiState("idle");
   }, []);
 
-  return { messages, isLoading, conversationId, latestQuote, sendMessage, loadConversation, reset };
+  return { messages, isLoading, aiState, conversationId, latestQuote, sendMessage, loadConversation, reset };
 }
 
 export function useConversations() {
