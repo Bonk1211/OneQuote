@@ -56,20 +56,24 @@ async def get_current_user(
             onechain_address=wallet_address,
         )
 
-    # Auto-create user on first wallet connection
-    insert_resp = (
+    # Auto-create user on first wallet connection.
+    # Use upsert with on_conflict to handle concurrent first-requests safely.
+    upsert_resp = (
         supabase.table("users")
-        .insert({
-            "onechain_address": wallet_address,
-            "email": f"{wallet_address[:10]}@wallet.local",
-        })
+        .upsert(
+            {
+                "onechain_address": wallet_address,
+                "email": f"{wallet_address[:10]}@wallet.local",
+            },
+            on_conflict="onechain_address",
+        )
         .execute()
     )
 
-    if not insert_resp.data:
+    if not upsert_resp.data:
         raise HTTPException(500, "Failed to create user")
 
     return AuthenticatedUser(
-        id=insert_resp.data[0]["id"],
+        id=upsert_resp.data[0]["id"],
         onechain_address=wallet_address,
     )

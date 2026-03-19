@@ -1,6 +1,8 @@
 "use client";
 
 import { Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/quote";
 
@@ -33,7 +35,15 @@ export function MessageBubble({ message }: Props) {
             : "bg-zinc-800 text-zinc-200"
         )}
       >
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          <div className="prose-chat">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

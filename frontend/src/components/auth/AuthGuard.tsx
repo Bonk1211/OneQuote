@@ -7,6 +7,7 @@ import {
   useCurrentAccount,
   useAutoConnectWallet,
 } from "@mysten/dapp-kit";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -16,6 +17,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const account = useCurrentAccount();
   const autoConnectStatus = useAutoConnectWallet();
   const router = useRouter();
+
+  // Auto-fetch profile once wallet is connected (populates Zustand store)
+  useUserProfile();
 
   // Auto-connect still in progress — show loader
   if (autoConnectStatus === "idle") {
