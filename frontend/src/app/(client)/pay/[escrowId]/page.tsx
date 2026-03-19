@@ -30,6 +30,7 @@ export default function ClientPaymentPage() {
     fundMilestone,
     releaseMilestone,
     disputeMilestone,
+    resolveDispute,
     isLoading: txLoading,
     clearError,
   } = useEscrow();
@@ -93,17 +94,19 @@ export default function ClientPaymentPage() {
     fund: "funded",
     release: "released",
     dispute: "disputed",
+    resolve_dispute: "funded",
   };
 
   const actionLabels: Record<string, string> = {
     fund: "Funded",
     release: "Released",
     dispute: "Disputed",
+    resolve_dispute: "Dispute Resolved",
   };
 
   const handleAction = async (
     milestoneId: string,
-    action: "request_release" | "release" | "fund" | "dispute"
+    action: "request_release" | "release" | "fund" | "dispute" | "resolve_dispute"
   ) => {
     if (!project?.escrow_object_id) return;
     const ms = milestones.find((m) => m.id === milestoneId);
@@ -131,6 +134,8 @@ export default function ClientPaymentPage() {
         result = await releaseMilestone(params);
       } else if (action === "dispute") {
         result = await disputeMilestone(params);
+      } else if (action === "resolve_dispute") {
+        result = await resolveDispute(params);
       }
 
       // Update milestone status in DB immediately after confirmed on-chain tx

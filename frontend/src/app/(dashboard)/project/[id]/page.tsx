@@ -261,7 +261,7 @@ export default function ProjectDetailPage() {
 
   const handleMilestoneAction = async (
     milestoneId: string,
-    action: "request_release" | "release" | "fund" | "dispute"
+    action: "request_release" | "release" | "fund" | "dispute" | "resolve_dispute"
   ) => {
     if (!project?.escrow_object_id || !account?.address) return;
     const ms = milestones.find((m) => m.id === milestoneId);
@@ -287,7 +287,6 @@ export default function ProjectDetailPage() {
 
       const newStatus = statusMap[action];
       if (newStatus) {
-        // Persist to DB immediately
         try {
           await apiFetch(`/api/projects/${id}/milestones`, {
             method: "PATCH",

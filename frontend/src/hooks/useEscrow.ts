@@ -13,6 +13,7 @@ import {
   buildRequestRelease,
   buildReleaseMilestone,
   buildDisputeMilestone,
+  buildResolveDispute,
   buildCancelEscrow,
   type CreateEscrowParams,
   type FundMilestoneParams,
@@ -37,6 +38,7 @@ interface UseEscrowReturn {
   requestRelease: (params: MilestoneActionParams) => Promise<TxResult>;
   releaseMilestone: (params: MilestoneActionParams) => Promise<TxResult>;
   disputeMilestone: (params: MilestoneActionParams) => Promise<TxResult>;
+  resolveDispute: (params: MilestoneActionParams) => Promise<TxResult>;
   cancelEscrow: (params: CancelEscrowParams) => Promise<TxResult>;
   isLoading: boolean;
   error: string | null;
@@ -129,6 +131,11 @@ export function useEscrow(): UseEscrowReturn {
     [execute]
   );
 
+  const resolveDispute = useCallback(
+    (params: MilestoneActionParams) => execute(buildResolveDispute(params)),
+    [execute]
+  );
+
   const cancelEscrow = useCallback(
     (params: CancelEscrowParams) => execute(buildCancelEscrow(params)),
     [execute]
@@ -140,6 +147,7 @@ export function useEscrow(): UseEscrowReturn {
     requestRelease,
     releaseMilestone,
     disputeMilestone,
+    resolveDispute,
     cancelEscrow,
     isLoading,
     error,

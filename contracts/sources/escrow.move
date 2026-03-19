@@ -257,6 +257,35 @@ module solo_escrow::escrow {
         });
     }
 
+    /// Resolve a dispute — both client and operator must agree by having the client call this.
+    /// Resets the milestone back to FUNDED so the release flow can restart.
+    public entry fun resolve_dispute<T>(
+        escrow: &mut Escrow<T>,
+        milestone_index: u64,
+        ctx: &mut TxContext,
+    ) {
+        // Only client can resolve (they opened the dispute, they close it)
+        assert!(tx_context::sender(ctx) == escrow.client, E_NOT_CLIENT);
+
+        let milestone = vector::borrow_mut(&mut escrow.milestones, milestone_index);
+        assert!(milestone.status == MILESTONE_DISPUTED, E_INVALID_STATUS);
+
+        milestone.status = MILESTONE_FUNDED;
+
+        // Reset escrow status if no other milestones are disputed
+        let mut has_disputes = false;
+        let len = vector::length(&escrow.milestones);
+        let mut i: u64 = 0;
+        while (i < len) {
+            let m = vector::borrow(&escrow.milestones, i);
+            if (m.status == MILESTONE_DISPUTED) { has_disputes = true };
+            i = i + 1;
+        };
+        if (!has_disputes) {
+            escrow.status = STATUS_IN_PROGRESS;
+        };
+    }
+
     public entry fun cancel_escrow<T>(
         escrow: &mut Escrow<T>,
         ctx: &mut TxContext,

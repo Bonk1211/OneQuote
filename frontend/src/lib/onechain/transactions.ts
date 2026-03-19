@@ -212,6 +212,29 @@ export function buildDisputeMilestone(
   return tx;
 }
 
+// ─── resolve_dispute ────────────────────────────────────────────────
+
+/**
+ * Build a `resolve_dispute<T>` transaction.
+ * Called by the client to resolve a dispute, resetting the milestone to FUNDED.
+ */
+export function buildResolveDispute(
+  params: MilestoneActionParams
+): Transaction {
+  const tx = new Transaction();
+
+  tx.moveCall({
+    target: `${MODULE}::resolve_dispute`,
+    typeArguments: [USDC_TYPE],
+    arguments: [
+      tx.object(params.escrowObjectId),
+      tx.pure.u64(params.milestoneIndex),
+    ],
+  });
+
+  return tx;
+}
+
 // ─── cancel_escrow ──────────────────────────────────────────────────
 
 export interface CancelEscrowParams {
