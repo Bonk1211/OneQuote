@@ -20,8 +20,15 @@ import {
   type CancelEscrowParams,
 } from "@/lib/onechain/transactions";
 
+interface ObjectChange {
+  type: string;
+  objectType?: string;
+  objectId?: string;
+}
+
 interface TxResult {
   digest: string;
+  objectChanges?: ObjectChange[];
 }
 
 interface UseEscrowReturn {
@@ -47,7 +54,7 @@ export function useEscrow(): UseEscrowReturn {
         transactionBlock: bytes,
         signature,
         options: {
-          showRawEffects: true,
+          showEffects: true,
           showObjectChanges: true,
           showEvents: true,
         },
@@ -68,18 +75,28 @@ export function useEscrow(): UseEscrowReturn {
       try {
         const result = await signAndExecute({ transaction: tx });
 
+        console.log("[useEscrow] Full tx result:", JSON.stringify(result, null, 2));
+
         if (result.effects?.status?.status !== "success") {
-          throw new Error(
-            `Transaction failed on-chain: ${result.effects?.status?.error ?? "unknown error"}`
-          );
+          const errorDetail =
+            result.effects?.status?.error
+            || (result.rawEffects ? `rawEffects present (digest: ${result.digest})` : null)
+            || JSON.stringify(result.effects ?? result);
+          throw new Error(`Transaction failed on-chain: ${errorDetail}`);
         }
 
-        return { digest: result.digest };
+        return { digest: result.digest, objectChanges: result.objectChanges as ObjectChange[] | undefined };
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "An unknown error occurred";
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : JSON.stringify(err) !== "{}"
+                ? JSON.stringify(err)
+                : "Transaction rejected or unknown error";
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setIsLoading(false);
       }

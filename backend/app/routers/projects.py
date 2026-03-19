@@ -12,6 +12,8 @@ class ProjectUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
     client_name: Optional[str] = Field(None, max_length=200)
+    escrow_object_id: Optional[str] = Field(None, max_length=100)
+    status: Optional[str] = Field(None, max_length=50)
 
 
 @router.get("/")

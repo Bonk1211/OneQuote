@@ -65,7 +65,7 @@ make env              # Creates .env files from .env.example templates
 - **AI quoting pipeline** (`POST /api/chat/quote`): Fetches user overheads → builds LLM prompt with financial context → calls OpenAI GPT-4o → parses JSON from response → runs profitability engine → stores project+quote+milestones → returns analysis.
 
 ### Smart Contracts (Move on OneChain)
-- `contracts/sources/escrow.move`: Generic `Escrow<T>` shared object with milestone-based USDC deposits.
+- `contracts/sources/escrow.move`: Generic `Escrow<T>` shared object with milestone-based OCT deposits.
 - Entry functions: `create_escrow`, `fund_milestone`, `request_release`, `release_milestone`, `dispute_milestone`, `cancel_escrow`.
 - Transaction construction in backend via raw JSON-RPC (`unsafe_moveCall`) — no Sui TS SDK on the backend.
 - **Gas sponsorship**: Platform hot wallet co-signs gas; user signs sender portion via OneWallet. Combined and submitted by the backend.

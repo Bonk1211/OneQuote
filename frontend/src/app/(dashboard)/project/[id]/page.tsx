@@ -2,7 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import {
+  useCurrentAccount,
+  useDisconnectWallet,
+  useCurrentWallet,
+} from "@mysten/dapp-kit";
 import {
   Save,
   Download,
@@ -12,11 +16,16 @@ import {
   Pencil,
   X,
   Check,
+  Shield,
+  Link,
+  Loader2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { useUpdateQuote, useUpdateProject, useUpdateUserProfile, useDownloadQuotePdf } from "@/hooks/useQuote";
+import { useEscrow } from "@/hooks/useEscrow";
 import { EscrowStatusBadge } from "@/components/escrow/EscrowStatusBadge";
+import { MilestoneTracker } from "@/components/escrow/MilestoneTracker";
 import { Dialog } from "@/components/ui/Dialog";
 import { InvoicePreview } from "@/components/quote/InvoicePreview";
 import type { Project, Quote, Milestone, LineItem } from "@/types/database";
@@ -29,6 +38,8 @@ interface ProjectWithRelations extends Project {
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const account = useCurrentAccount();
+  const { mutateAsync: disconnectWallet } = useDisconnectWallet();
+  const { currentWallet } = useCurrentWallet();
   const [project, setProject] = useState<ProjectWithRelations | null>(null);
   const [editingItems, setEditingItems] = useState<LineItem[]>([]);
   const [editingMilestones, setEditingMilestones] = useState<Milestone[]>([]);
@@ -39,6 +50,10 @@ export default function ProjectDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showEscrowModal, setShowEscrowModal] = useState(false);
+  const [clientAddress, setClientAddress] = useState("");
+  const [escrowCreating, setEscrowCreating] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const quote = project?.quotes?.[0] ?? null;
   const milestones = project?.milestones ?? [];
@@ -46,6 +61,7 @@ export default function ProjectDetailPage() {
   const updateProject = useUpdateProject(id ?? "");
   const updateUserProfile = useUpdateUserProfile();
   const { download: downloadPdf } = useDownloadQuotePdf(quote?.id ?? "");
+  const { createEscrow, requestRelease, disputeMilestone, isLoading: escrowTxLoading } = useEscrow();
 
   // Fetch user profile for business name
   useEffect(() => {
@@ -159,6 +175,116 @@ export default function ProjectDetailPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCreateEscrow = async () => {
+    if (!account?.address || !project || !quote) return;
+    const addr = clientAddress.trim();
+    if (!/^0x[a-fA-F0-9]{64}$/.test(addr)) {
+      alert("Invalid wallet address. Must start with 0x and be 66 characters.");
+      return;
+    }
+
+    setEscrowCreating(true);
+    try {
+      const encoder = new TextEncoder();
+      const sortedMilestones = [...milestones].sort((a, b) => a.sequence_number - b.sequence_number);
+
+      const descriptionHashes = await Promise.all(
+        sortedMilestones.map(async (ms) => {
+          const hash = await crypto.subtle.digest("SHA-256", encoder.encode(ms.description ?? ms.title));
+          return new Uint8Array(hash);
+        })
+      );
+
+      const quoteHash = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", encoder.encode(quote.content_hash ?? quote.id))
+      );
+
+      const amounts = sortedMilestones.map((m) => BigInt(m.amount_fiat));
+
+      const result = await createEscrow({
+        client: addr,
+        operator: account.address,
+        amounts,
+        descriptionHashes,
+        quoteHash,
+      });
+
+      const created = result.objectChanges?.find(
+        (c) => c.type === "created" && c.objectType?.includes("::escrow::Escrow")
+      );
+      const escrowObjectId = created?.objectId;
+
+      if (escrowObjectId) {
+        await apiFetch(`/api/projects/${id}`, {
+          method: "PATCH",
+          token: account.address,
+          body: JSON.stringify({ escrow_object_id: escrowObjectId, status: "escrowed" }),
+        });
+      }
+
+      setShowEscrowModal(false);
+      setClientAddress("");
+      await fetchProject();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : JSON.stringify(err, Object.getOwnPropertyNames(err as object));
+      console.error("Escrow creation failed:", message, err);
+
+      // Handle wallet permission error (4100) — disconnect so user can reconnect with full permissions
+      const isPermissionError =
+        message.includes("4100") || message.includes("viewAccount") || message.includes("suggestTransaction");
+      if (isPermissionError) {
+        alert(
+          "Your wallet session lacks transaction permissions. Please reconnect your wallet and try again."
+        );
+        await disconnectWallet();
+      } else {
+        alert(`Escrow creation failed: ${message}`);
+      }
+    } finally {
+      setEscrowCreating(false);
+    }
+  };
+
+  const handleMilestoneAction = async (
+    milestoneId: string,
+    action: "request_release" | "release" | "fund" | "dispute"
+  ) => {
+    if (!project?.escrow_object_id) return;
+    const ms = milestones.find((m) => m.id === milestoneId);
+    if (!ms) return;
+
+    try {
+      const params = {
+        escrowObjectId: project.escrow_object_id,
+        milestoneIndex: ms.sequence_number,
+      };
+
+      if (action === "request_release") {
+        await requestRelease(params);
+      } else if (action === "dispute") {
+        await disputeMilestone(params);
+      }
+
+      // Wait for event indexer to sync
+      setTimeout(() => fetchProject(), 3000);
+    } catch (err) {
+      console.error(`Milestone ${action} failed:`, err);
+    }
+  };
+
+  const handleShareLink = () => {
+    if (!project?.client_access_token) return;
+    const url = `${window.location.origin}/pay/${project.client_access_token}`;
+    navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const handleCancel = () => {
@@ -282,6 +408,27 @@ export default function ProjectDetailPage() {
           <Download className="h-4 w-4" />
           Download PDF
         </button>
+
+        {/* Escrow actions */}
+        {!project.escrow_object_id &&
+          ["draft", "quoted", "accepted"].includes(project.status) && (
+            <button
+              onClick={() => setShowEscrowModal(true)}
+              className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              <Shield className="h-4 w-4" />
+              Create Escrow
+            </button>
+          )}
+        {project.escrow_object_id && (
+          <button
+            onClick={handleShareLink}
+            className="flex items-center gap-2 rounded-lg border border-indigo-500/50 px-4 py-2.5 text-sm font-medium text-indigo-400 hover:bg-indigo-500/10"
+          >
+            <Link className="h-4 w-4" />
+            {linkCopied ? "Copied!" : "Share Payment Link"}
+          </button>
+        )}
       </div>
 
       {/* Invoice Details: Billed By / Billed To */}
@@ -478,42 +625,92 @@ export default function ProjectDetailPage() {
           <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3">
             Payment Milestones
           </h2>
-          <div className="space-y-2">
-            {(isEditing ? editingMilestones : milestones)
-              .sort((a, b) => a.sequence_number - b.sequence_number)
-              .map((ms, i) => (
-                <div
-                  key={ms.id}
-                  className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-300">
-                      {i + 1}
-                    </span>
-                    <div>
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={ms.title}
-                          onChange={(e) => updateMilestone(i, "title", e.target.value)}
-                          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-white focus:border-indigo-500 focus:outline-none"
-                        />
-                      ) : (
-                        <p className="text-sm font-medium text-white">{ms.title}</p>
-                      )}
-                      {ms.description && !isEditing && (
-                        <p className="text-xs text-zinc-500">{ms.description}</p>
-                      )}
+          {project.escrow_object_id && !isEditing ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+              <MilestoneTracker
+                milestones={milestones}
+                userRole="operator"
+                onAction={handleMilestoneAction}
+                disabled={escrowTxLoading}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(isEditing ? editingMilestones : milestones)
+                .sort((a, b) => a.sequence_number - b.sequence_number)
+                .map((ms, i) => (
+                  <div
+                    key={ms.id}
+                    className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-300">
+                        {i + 1}
+                      </span>
+                      <div>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={ms.title}
+                            onChange={(e) => updateMilestone(i, "title", e.target.value)}
+                            className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium text-white">{ms.title}</p>
+                        )}
+                        {ms.description && !isEditing && (
+                          <p className="text-xs text-zinc-500">{ms.description}</p>
+                        )}
+                      </div>
                     </div>
+                    <span className="text-sm font-semibold text-white">
+                      {formatCurrency(ms.amount_fiat, quote?.currency_code)}
+                    </span>
                   </div>
-                  <span className="text-sm font-semibold text-white">
-                    {formatCurrency(ms.amount_fiat, quote?.currency_code)}
-                  </span>
-                </div>
-              ))}
-          </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Create Escrow Modal */}
+      <Dialog
+        open={showEscrowModal}
+        onClose={() => setShowEscrowModal(false)}
+        title="Create On-Chain Escrow"
+        className="max-w-md"
+      >
+        <p className="mb-4 text-sm text-zinc-400">
+          This will create an escrow smart contract on OneChain. The client will
+          be able to fund milestones and you can request releases as work completes.
+        </p>
+        <label className="mb-1 block text-xs font-medium text-zinc-400">
+          Client Wallet Address
+        </label>
+        <input
+          type="text"
+          value={clientAddress}
+          onChange={(e) => setClientAddress(e.target.value)}
+          placeholder="0x..."
+          className="mb-4 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setShowEscrowModal(false)}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreateEscrow}
+            disabled={escrowCreating || !clientAddress.trim()}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {escrowCreating && <Loader2 className="h-4 w-4 animate-spin" />}
+            {escrowCreating ? "Creating..." : "Create Escrow"}
+          </button>
+        </div>
+      </Dialog>
 
       {/* Invoice Preview Overlay */}
       <InvoicePreviewOverlay

@@ -8,9 +8,10 @@ interface Props {
   milestones: Milestone[];
   userRole: "operator" | "client";
   onAction?: (milestoneId: string, action: "request_release" | "release" | "fund" | "dispute") => void;
+  disabled?: boolean;
 }
 
-export function MilestoneTracker({ milestones, userRole, onAction }: Props) {
+export function MilestoneTracker({ milestones, userRole, onAction, disabled }: Props) {
   const sorted = [...milestones].sort((a, b) => a.sequence_number - b.sequence_number);
 
   return (
@@ -56,7 +57,8 @@ export function MilestoneTracker({ milestones, userRole, onAction }: Props) {
                 {userRole === "operator" && ms.status === "funded" && (
                   <button
                     onClick={() => onAction(ms.id, "request_release")}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                    disabled={disabled}
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Request Release
                   </button>
@@ -64,7 +66,8 @@ export function MilestoneTracker({ milestones, userRole, onAction }: Props) {
                 {userRole === "client" && ms.status === "pending" && (
                   <button
                     onClick={() => onAction(ms.id, "fund")}
-                    className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                    disabled={disabled}
+                    className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Fund Milestone
                   </button>
@@ -73,7 +76,8 @@ export function MilestoneTracker({ milestones, userRole, onAction }: Props) {
                   (ms.status === "funded" || ms.status === "release_requested") && (
                     <button
                       onClick={() => onAction(ms.id, "release")}
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                      disabled={disabled}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Approve Release
                     </button>
@@ -81,7 +85,8 @@ export function MilestoneTracker({ milestones, userRole, onAction }: Props) {
                 {(ms.status === "funded" || ms.status === "release_requested") && (
                   <button
                     onClick={() => onAction(ms.id, "dispute")}
-                    className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10"
+                    disabled={disabled}
+                    className="rounded-md border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Dispute
                   </button>
