@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import {
   LayoutDashboard,
   MessageSquarePlus,
   Settings,
   Calculator,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useConversations } from "@/hooks/useChat";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +25,11 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { onechainAddress, signOut } = useAuth();
+  const { conversations, fetchConversations } = useConversations();
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   const truncated = onechainAddress
     ? `${onechainAddress.slice(0, 6)}...${onechainAddress.slice(-4)}`
@@ -36,7 +44,7 @@ export function Sidebar() {
         <p className="mt-1 text-xs text-zinc-500">Profitable quoting, guaranteed</p>
       </div>
 
-      <nav className="flex-1 space-y-1">
+      <nav className="space-y-1">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -57,6 +65,36 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Chat History */}
+      {conversations.length > 0 && (
+        <div className="mt-6 flex-1 overflow-hidden">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Chat History
+          </p>
+          <div className="space-y-0.5 overflow-y-auto max-h-[calc(100vh-420px)]">
+            {conversations.map((conv) => {
+              const convHref = `/quote/new?conversation=${conv.id}`;
+              const isActive = pathname === "/quote/new" && typeof window !== "undefined" && window.location.search.includes(conv.id);
+              return (
+                <Link
+                  key={conv.id}
+                  href={convHref}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                    isActive
+                      ? "bg-indigo-500/10 text-indigo-400"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                  )}
+                >
+                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{conv.title}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="border-t border-zinc-800 pt-4">
         {truncated && (

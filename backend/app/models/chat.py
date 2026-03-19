@@ -2,10 +2,16 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 
+class ConversationMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000)
     conversation_id: Optional[str] = None
     project_id: Optional[str] = None
+    conversation_history: list[ConversationMessage] = []
 
 
 class LineItem(BaseModel):

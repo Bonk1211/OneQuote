@@ -8,16 +8,23 @@ import { QuoteSuggestion } from "./QuoteSuggestion";
 
 interface Props {
   onQuoteAccepted?: (conversationId: string) => void;
+  resumeConversationId?: string;
 }
 
-export function ChatInterface({ onQuoteAccepted }: Props) {
-  const { messages, isLoading, conversationId, latestQuote, sendMessage } = useChat();
+export function ChatInterface({ onQuoteAccepted, resumeConversationId }: Props) {
+  const { messages, isLoading, conversationId, latestQuote, sendMessage, loadConversation } = useChat();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (resumeConversationId) {
+      loadConversation(resumeConversationId);
+    }
+  }, [resumeConversationId, loadConversation]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +37,7 @@ export function ChatInterface({ onQuoteAccepted }: Props) {
     <div className="flex h-full flex-col">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isLoading && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <h2 className="text-lg font-semibold text-white">

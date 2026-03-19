@@ -1,7 +1,7 @@
 """
 PDF generation service for QuoteGuard quotes.
 
-Uses Jinja2 for HTML templating and WeasyPrint for PDF rendering.
+Uses fpdf2 for PDF rendering — pure Python, no system dependencies.
 Generated PDFs are uploaded to Supabase Storage under
 ``quotes/{user_id}/{quote_id}.pdf``.
 """
@@ -14,249 +14,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from jinja2 import Environment, BaseLoader
+from fpdf import FPDF
 
 logger = logging.getLogger(__name__)
-
-# ───────────────────────── HTML Template ─────────────────────────────
-
-QUOTE_HTML_TEMPLATE = """\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<style>
-  @page {
-    size: A4;
-    margin: 20mm 18mm 25mm 18mm;
-    @bottom-center {
-      content: "Page " counter(page) " of " counter(pages);
-      font-size: 9px;
-      color: #888;
-    }
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    color: #1a1a2e;
-    line-height: 1.5;
-  }
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 30px;
-    border-bottom: 3px solid #4F46E5;
-    padding-bottom: 18px;
-  }
-  .brand h1 {
-    font-size: 22px;
-    color: #4F46E5;
-    margin-bottom: 4px;
-  }
-  .brand p {
-    font-size: 11px;
-    color: #555;
-  }
-  .quote-meta {
-    text-align: right;
-    font-size: 11px;
-  }
-  .quote-meta .label {
-    color: #888;
-    text-transform: uppercase;
-    font-size: 9px;
-    letter-spacing: 0.5px;
-  }
-  .quote-meta .value {
-    font-weight: 600;
-    color: #1a1a2e;
-  }
-  h2 {
-    font-size: 16px;
-    color: #1a1a2e;
-    margin: 24px 0 10px 0;
-    border-bottom: 1px solid #e5e7eb;
-    padding-bottom: 6px;
-  }
-  .summary {
-    margin-bottom: 16px;
-    color: #444;
-    font-size: 12px;
-  }
-  /* ── Line items table ── */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 16px;
-  }
-  th {
-    background: #f8f9fa;
-    text-align: left;
-    padding: 8px 10px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: #555;
-    border-bottom: 2px solid #e5e7eb;
-  }
-  td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 11px;
-  }
-  tr:last-child td { border-bottom: none; }
-  .text-right { text-align: right; }
-  /* ── Totals ── */
-  .totals {
-    width: 280px;
-    margin-left: auto;
-    margin-bottom: 28px;
-  }
-  .totals .row {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 0;
-    font-size: 12px;
-  }
-  .totals .row.grand {
-    border-top: 2px solid #4F46E5;
-    margin-top: 6px;
-    padding-top: 8px;
-    font-weight: 700;
-    font-size: 14px;
-    color: #4F46E5;
-  }
-  /* ── Milestones ── */
-  .milestone {
-    background: #f8f9fa;
-    border-left: 3px solid #7C3AED;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-    border-radius: 0 4px 4px 0;
-  }
-  .milestone .ms-title {
-    font-weight: 600;
-    font-size: 12px;
-    color: #1a1a2e;
-  }
-  .milestone .ms-desc {
-    font-size: 11px;
-    color: #555;
-  }
-  .milestone .ms-amount {
-    font-size: 11px;
-    font-weight: 600;
-    color: #7C3AED;
-    margin-top: 2px;
-  }
-  /* ── Footer ── */
-  .footer {
-    margin-top: 40px;
-    border-top: 1px solid #e5e7eb;
-    padding-top: 12px;
-    font-size: 9px;
-    color: #999;
-  }
-  .footer .hash {
-    font-family: 'Courier New', Courier, monospace;
-    word-break: break-all;
-  }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div class="brand">
-    <h1>{{ business_name | default("QuoteGuard") }}</h1>
-    {% if business_email %}
-    <p>{{ business_email }}</p>
-    {% endif %}
-    {% if business_phone %}
-    <p>{{ business_phone }}</p>
-    {% endif %}
-  </div>
-  <div class="quote-meta">
-    <div><span class="label">Quote ID</span><br><span class="value">{{ quote_id_short }}</span></div>
-    <div style="margin-top:8px"><span class="label">Date</span><br><span class="value">{{ issue_date }}</span></div>
-    {% if client_name %}
-    <div style="margin-top:8px"><span class="label">Client</span><br><span class="value">{{ client_name }}</span></div>
-    {% endif %}
-  </div>
-</div>
-
-<h2>{{ title }}</h2>
-<p class="summary">{{ summary }}</p>
-
-<h2>Line Items</h2>
-<table>
-  <thead>
-    <tr>
-      <th style="width:45%">Description</th>
-      <th class="text-right">Qty</th>
-      <th>Unit</th>
-      <th class="text-right">Unit Price</th>
-      <th class="text-right">Total</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for item in line_items %}
-    <tr>
-      <td>{{ item.description }}</td>
-      <td class="text-right">{{ item.quantity }}</td>
-      <td>{{ item.unit }}</td>
-      <td class="text-right">{{ currency_symbol }}{{ "%.2f" | format(item.unit_price / 100) }}</td>
-      <td class="text-right">{{ currency_symbol }}{{ "%.2f" | format(item.total / 100) }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<div class="totals">
-  <div class="row">
-    <span>Subtotal</span>
-    <span>{{ currency_symbol }}{{ "%.2f" | format(subtotal / 100) }}</span>
-  </div>
-  {% if vat_amount > 0 %}
-  <div class="row">
-    <span>VAT ({{ vat_rate_display }})</span>
-    <span>{{ currency_symbol }}{{ "%.2f" | format(vat_amount / 100) }}</span>
-  </div>
-  {% endif %}
-  <div class="row grand">
-    <span>Total</span>
-    <span>{{ currency_symbol }}{{ "%.2f" | format(total_amount / 100) }}</span>
-  </div>
-</div>
-
-{% if milestones %}
-<h2>Payment Schedule</h2>
-{% for ms in milestones %}
-<div class="milestone">
-  <div class="ms-title">{{ ms.sequence_number }}. {{ ms.title }}</div>
-  <div class="ms-desc">{{ ms.description }}</div>
-  <div class="ms-amount">{{ currency_symbol }}{{ "%.2f" | format(ms.amount_fiat / 100) }}</div>
-</div>
-{% endfor %}
-{% endif %}
-
-<div class="footer">
-  <p>Generated by QuoteGuard on {{ generated_at }}.</p>
-  {% if content_hash %}
-  <p>Content hash: <span class="hash">{{ content_hash }}</span></p>
-  {% endif %}
-  <p style="margin-top: 4px">This quote is subject to the terms and conditions agreed between the parties.</p>
-</div>
-
-</body>
-</html>
-"""
-
-# Jinja2 environment with the template loaded from string
-_env = Environment(loader=BaseLoader(), autoescape=True)
-_template = _env.from_string(QUOTE_HTML_TEMPLATE)
-
 
 # ───────────────────── Currency helpers ───────────────────────────────
 
@@ -273,8 +33,27 @@ def _currency_symbol(code: str) -> str:
     return CURRENCY_SYMBOLS.get(code, code)
 
 
-# ──────────────────── Public API ─────────────────────────────────────
+def _fmt(amount_minor: int, symbol: str) -> str:
+    return f"{symbol}{amount_minor / 100:,.2f}"
 
+
+# ──────────────────── PDF Builder ────────────────────────────────────
+
+class QuotePDF(FPDF):
+    """Custom PDF with header/footer for QuoteGuard quotes."""
+
+    def __init__(self, business_name: str, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.business_name = business_name or "QuoteGuard"
+
+    def footer(self) -> None:
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", align="C")
+
+
+# ──────────────────── Public API ─────────────────────────────────────
 
 def generate_quote_pdf(
     quote: dict[str, Any],
@@ -282,79 +61,232 @@ def generate_quote_pdf(
     milestones: list[dict[str, Any]],
     business_info: dict[str, Any],
 ) -> bytes:
-    """
-    Render a professional PDF for the given quote.
-
-    Parameters
-    ----------
-    quote : dict
-        Row from the ``quotes`` table.
-    project : dict
-        Row from the ``projects`` table.
-    milestones : list[dict]
-        Rows from the ``milestones`` table, ordered by sequence_number.
-    business_info : dict
-        Keys: ``business_name``, ``business_email``, ``business_phone``,
-        ``currency_code``, ``vat_rate``.
-
-    Returns
-    -------
-    bytes
-        The rendered PDF file contents.
-    """
-    from weasyprint import HTML  # lazy import to avoid startup cost
-
-    currency_code = business_info.get("currency_code", quote.get("currency_code", "GBP"))
+    currency_code = business_info.get("currency_code", quote.get("currency_code", "USD"))
     symbol = _currency_symbol(currency_code)
-    vat_rate = float(business_info.get("vat_rate", 0.20))
     vat_amount = quote.get("vat_amount", 0)
+    vat_rate = float(business_info.get("vat_rate", 0.20))
 
-    # Compute content hash if not already present
     content_hash = quote.get("content_hash", "")
     if not content_hash:
         hash_payload = json.dumps(quote, sort_keys=True, default=str)
         content_hash = hashlib.sha256(hash_payload.encode()).hexdigest()
 
-    # Prepare line items — stored as dicts or possibly JSON string
     raw_items = quote.get("line_items", [])
     if isinstance(raw_items, str):
         raw_items = json.loads(raw_items)
 
-    # Sort milestones by sequence number
-    sorted_milestones = sorted(
-        milestones, key=lambda m: m.get("sequence_number", 0)
-    )
+    sorted_milestones = sorted(milestones, key=lambda m: m.get("sequence_number", 0))
 
     quote_id = str(quote.get("id", ""))
+    quote_id_short = quote_id[:8].upper() if len(quote_id) >= 8 else quote_id.upper()
+    issue_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    client_name = project.get("client_name", "")
+    title = quote.get("title", project.get("title", "Untitled"))
+    summary = quote.get("summary", project.get("description", ""))
 
-    context = {
-        "business_name": business_info.get("business_name", "QuoteGuard"),
-        "business_email": business_info.get("business_email", ""),
-        "business_phone": business_info.get("business_phone", ""),
-        "quote_id_short": quote_id[:8].upper() if len(quote_id) >= 8 else quote_id.upper(),
-        "issue_date": datetime.now(timezone.utc).strftime("%d %B %Y"),
-        "client_name": project.get("client_name", ""),
-        "title": quote.get("title", project.get("title", "Untitled")),
-        "summary": quote.get("summary", project.get("description", "")),
-        "line_items": raw_items,
-        "subtotal": quote.get("subtotal", 0),
-        "vat_amount": vat_amount,
-        "vat_rate_display": f"{vat_rate * 100:.0f}%",
-        "total_amount": quote.get("total_amount", 0),
-        "currency_symbol": symbol,
-        "milestones": sorted_milestones,
-        "content_hash": content_hash,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-    }
+    pdf = QuotePDF(business_name=business_info.get("business_name", "QuoteGuard"))
+    pdf.alias_nb_pages()
+    pdf.set_auto_page_break(auto=True, margin=25)
+    pdf.add_page()
 
-    html_string = _template.render(**context)
-    pdf_bytes: bytes = HTML(string=html_string).write_pdf()
+    # ── Header ──────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_text_color(79, 70, 229)  # indigo-600
+    pdf.cell(100, 12, pdf.business_name, new_x="RIGHT")
 
-    logger.info(
-        "Generated PDF for quote %s (%d bytes)",
-        quote_id,
-        len(pdf_bytes),
-    )
+    # Quote meta (right side)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(150, 150, 150)
+    x_right = 140
+    pdf.set_xy(x_right, 10)
+    pdf.cell(60, 4, "QUOTE ID", align="R")
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 30, 46)
+    pdf.set_xy(x_right, 14)
+    pdf.cell(60, 6, quote_id_short, align="R")
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.set_xy(x_right, 22)
+    pdf.cell(60, 4, "DATE", align="R")
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 30, 46)
+    pdf.set_xy(x_right, 26)
+    pdf.cell(60, 6, issue_date, align="R")
+
+    if client_name:
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(150, 150, 150)
+        pdf.set_xy(x_right, 34)
+        pdf.cell(60, 4, "CLIENT", align="R")
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(30, 30, 46)
+        pdf.set_xy(x_right, 38)
+        pdf.cell(60, 6, client_name, align="R")
+
+    # Indigo divider
+    pdf.set_y(48)
+    pdf.set_draw_color(79, 70, 229)
+    pdf.set_line_width(0.8)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+
+    # ── Title & Summary ──────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(30, 30, 46)
+    pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    if summary:
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(80, 80, 80)
+        pdf.multi_cell(0, 5, summary)
+        pdf.ln(6)
+
+    # ── Line Items Table ─────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, "LINE ITEMS", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_draw_color(220, 220, 220)
+    pdf.set_line_width(0.3)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(2)
+
+    # Table header
+    col_w = [76, 18, 22, 32, 32]
+    headers = ["Description", "Qty", "Unit", "Rate", "Total"]
+    aligns = ["L", "R", "C", "R", "R"]
+
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(130, 130, 130)
+    pdf.set_fill_color(248, 249, 250)
+    for i, h in enumerate(headers):
+        pdf.cell(col_w[i], 8, h, align=aligns[i], fill=True)
+    pdf.ln()
+    pdf.set_draw_color(220, 220, 220)
+    pdf.set_line_width(0.5)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+
+    # Table rows
+    pdf.set_font("Helvetica", "", 10)
+    for item in raw_items:
+        pdf.set_text_color(30, 30, 46)
+        y_before = pdf.get_y()
+
+        # Description may wrap
+        x = pdf.get_x()
+        pdf.multi_cell(col_w[0], 6, str(item.get("description", "")), new_x="RIGHT", new_y="TOP", max_line_height=6)
+        y_after = pdf.get_y()
+        row_h = max(y_after - y_before, 8)
+        pdf.set_xy(x + col_w[0], y_before)
+
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(col_w[1], row_h, str(item.get("quantity", "")), align="R")
+        pdf.cell(col_w[2], row_h, str(item.get("unit", "")), align="C")
+        pdf.cell(col_w[3], row_h, _fmt(item.get("unit_price", 0), symbol), align="R")
+
+        pdf.set_text_color(30, 30, 46)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(col_w[4], row_h, _fmt(item.get("total", 0), symbol), align="R")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.ln(row_h)
+
+        # Row divider
+        pdf.set_draw_color(240, 240, 240)
+        pdf.set_line_width(0.2)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+
+    pdf.ln(4)
+
+    # ── Totals ───────────────────────────────────────────────────────
+    totals_x = 130
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(130, 130, 130)
+    pdf.set_x(totals_x)
+    pdf.cell(38, 7, "Subtotal", align="R")
+    pdf.set_text_color(30, 30, 46)
+    pdf.cell(32, 7, _fmt(quote.get("subtotal", 0), symbol), align="R")
+    pdf.ln()
+
+    if vat_amount > 0:
+        pdf.set_text_color(130, 130, 130)
+        pdf.set_x(totals_x)
+        pdf.cell(38, 7, f"VAT ({vat_rate * 100:.0f}%)", align="R")
+        pdf.set_text_color(30, 30, 46)
+        pdf.cell(32, 7, _fmt(vat_amount, symbol), align="R")
+        pdf.ln()
+
+    # Grand total
+    pdf.set_draw_color(79, 70, 229)
+    pdf.set_line_width(0.8)
+    y = pdf.get_y() + 2
+    pdf.line(totals_x, y, 200, y)
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(79, 70, 229)
+    pdf.set_x(totals_x)
+    pdf.cell(38, 8, "Total", align="R")
+    pdf.cell(32, 8, _fmt(quote.get("total_amount", 0), symbol), align="R")
+    pdf.ln(14)
+
+    # ── Milestones ───────────────────────────────────────────────────
+    if sorted_milestones:
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 6, "PAYMENT SCHEDULE", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_draw_color(220, 220, 220)
+        pdf.set_line_width(0.3)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(4)
+
+        for ms in sorted_milestones:
+            y_start = pdf.get_y()
+            # Purple left bar
+            pdf.set_fill_color(248, 249, 250)
+            pdf.rect(10, y_start, 190, 16, "F")
+            pdf.set_fill_color(124, 58, 237)
+            pdf.rect(10, y_start, 1.2, 16, "F")
+
+            pdf.set_xy(14, y_start + 2)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(30, 30, 46)
+            seq = ms.get("sequence_number", 0)
+            pdf.cell(140, 6, f"{seq}. {ms.get('title', '')}")
+
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(124, 58, 237)
+            pdf.set_xy(150, y_start + 2)
+            pdf.cell(50, 6, _fmt(ms.get("amount_fiat", 0), symbol), align="R")
+
+            if ms.get("description"):
+                pdf.set_xy(14, y_start + 9)
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(120, 120, 120)
+                pdf.cell(140, 5, ms["description"])
+
+            pdf.set_y(y_start + 18)
+
+    # ── Footer ───────────────────────────────────────────────────────
+    pdf.ln(10)
+    pdf.set_draw_color(220, 220, 220)
+    pdf.set_line_width(0.3)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(180, 180, 180)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    pdf.cell(0, 4, f"Generated by QuoteGuard on {generated_at}.", new_x="LMARGIN", new_y="NEXT")
+
+    if content_hash:
+        pdf.set_font("Courier", "", 7)
+        pdf.cell(0, 4, f"Content hash: {content_hash}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(0, 4, "This quote is subject to the terms and conditions agreed between the parties.", new_x="LMARGIN", new_y="NEXT")
+
+    pdf_bytes = pdf.output()
+    logger.info("Generated PDF for quote %s (%d bytes)", quote_id, len(pdf_bytes))
     return pdf_bytes
 
 
@@ -364,16 +296,10 @@ def upload_quote_pdf(
     quote_id: str,
     pdf_bytes: bytes,
 ) -> str:
-    """
-    Upload a quote PDF to Supabase Storage.
-
-    The file is stored at ``quotes/{user_id}/{quote_id}.pdf`` in the
-    ``quote-pdfs`` bucket. Returns the storage path.
-    """
+    """Upload a quote PDF to Supabase Storage."""
     storage_path = f"{user_id}/{quote_id}.pdf"
     bucket = supabase.storage.from_("quote-pdfs")
 
-    # Attempt to remove any existing file (ignore errors)
     try:
         bucket.remove([storage_path])
     except Exception:

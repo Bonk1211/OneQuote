@@ -52,3 +52,23 @@ export interface ChatApiResponse {
   requires_clarification: boolean;
   clarification_questions: string[];
 }
+
+export interface Conversation {
+  id: string;
+  title: string;
+  project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationDetail {
+  conversation: Conversation;
+  messages: {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    parsed_quote: ParsedQuoteResponse | null;
+    profit_analysis: ProfitAnalysisResponse | null;
+    created_at: string;
+  }[];
+}

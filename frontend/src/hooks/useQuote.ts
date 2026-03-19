@@ -67,3 +67,45 @@ export function useUpdateQuoteStatus(id: string) {
     },
   });
 }
+
+export function useUpdateQuote(id: string) {
+  const account = useCurrentAccount();
+  const queryClient = useQueryClient();
+
+  return useMutation<Quote, Error, Partial<Quote>>({
+    mutationFn: (data) =>
+      apiFetch<Quote>(`/api/quotes/${id}`, {
+        method: "PATCH",
+        token: account?.address,
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes", id] });
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+    },
+  });
+}
+
+export function useDownloadQuotePdf(id: string) {
+  const account = useCurrentAccount();
+
+  const download = async () => {
+    if (!account?.address) return;
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/quotes/${id}/pdf`,
+      { headers: { Authorization: `Bearer ${account.address}` } }
+    );
+    if (!res.ok) throw new Error("PDF download failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `QuoteGuard-${id.slice(0, 8).toUpperCase()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return { download };
+}
