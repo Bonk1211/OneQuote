@@ -49,6 +49,125 @@ async def get_project(
     return resp.data
 
 
+@router.get("/pay/{access_token}")
+async def get_project_by_token(
+    access_token: str,
+    supabase=Depends(get_supabase),
+):
+    """Public endpoint — no auth required. Looks up project by client_access_token."""
+    resp = (
+        supabase.table("projects")
+        .select("*, milestones(*)")
+        .eq("client_access_token", access_token)
+        .single()
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(404, "Project not found")
+    # Strip sensitive fields
+    data = resp.data
+    data.pop("user_id", None)
+    return data
+
+
+class MilestoneStatusUpdate(BaseModel):
+    """Public endpoint payload for updating milestone status after on-chain tx."""
+    milestone_index: int = Field(..., ge=0)
+    status: str = Field(..., max_length=50)
+    tx_digest: Optional[str] = Field(None, max_length=200)
+
+
+@router.patch("/pay/{access_token}/milestones")
+async def update_milestone_status_by_token(
+    access_token: str,
+    data: MilestoneStatusUpdate,
+    supabase=Depends(get_supabase),
+):
+    """
+    Public endpoint — updates milestone status after a confirmed on-chain tx.
+    Used by the client payment page to sync DB state immediately after signing.
+    """
+    allowed_statuses = {"funded", "released", "disputed", "release_requested"}
+    if data.status not in allowed_statuses:
+        raise HTTPException(400, f"Status must be one of: {allowed_statuses}")
+
+    # Find project by access token
+    project_resp = (
+        supabase.table("projects")
+        .select("id")
+        .eq("client_access_token", access_token)
+        .single()
+        .execute()
+    )
+    if not project_resp.data:
+        raise HTTPException(404, "Project not found")
+
+    project_id = project_resp.data["id"]
+    seq = data.milestone_index + 1  # DB is 1-based
+
+    update_payload: dict = {"status": data.status}
+    if data.status == "funded" and data.tx_digest:
+        update_payload["funded_tx_digest"] = data.tx_digest
+    if data.status == "released" and data.tx_digest:
+        update_payload["released_tx_digest"] = data.tx_digest
+
+    resp = (
+        supabase.table("milestones")
+        .update(update_payload)
+        .eq("project_id", project_id)
+        .eq("sequence_number", seq)
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(404, "Milestone not found")
+    return resp.data[0]
+
+
+@router.patch("/{project_id}/milestones")
+async def update_milestone_status(
+    project_id: str,
+    data: MilestoneStatusUpdate,
+    user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    """Authenticated endpoint — contractor updates milestone status after on-chain tx."""
+    allowed_statuses = {"funded", "released", "disputed", "release_requested"}
+    if data.status not in allowed_statuses:
+        raise HTTPException(400, f"Status must be one of: {allowed_statuses}")
+
+    # Verify project ownership
+    project_resp = (
+        supabase.table("projects")
+        .select("id")
+        .eq("id", project_id)
+        .eq("user_id", str(user.id))
+        .single()
+        .execute()
+    )
+    if not project_resp.data:
+        raise HTTPException(404, "Project not found")
+
+    seq = data.milestone_index + 1
+
+    update_payload: dict = {"status": data.status}
+    if data.tx_digest:
+        if data.status == "funded":
+            update_payload["funded_tx_digest"] = data.tx_digest
+        elif data.status == "released":
+            update_payload["released_tx_digest"] = data.tx_digest
+
+    resp = (
+        supabase.table("milestones")
+        .update(update_payload)
+        .eq("project_id", project_id)
+        .eq("sequence_number", seq)
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(404, "Milestone not found")
+    return resp.data[0]
+
+
 @router.patch("/{project_id}")
 async def update_project(
     project_id: str,

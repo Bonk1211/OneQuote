@@ -100,6 +100,13 @@ export default function ProjectDetailPage() {
     fetchProject();
   }, [fetchProject]);
 
+  // Poll for updates when escrow is active (picks up client-side fund/release events)
+  useEffect(() => {
+    if (!project?.escrow_object_id) return;
+    const interval = setInterval(() => fetchProject(), 10000);
+    return () => clearInterval(interval);
+  }, [project?.escrow_object_id, fetchProject]);
+
   // --- Line item editing ---
   const updateLineItem = (
     index: number,
@@ -256,24 +263,47 @@ export default function ProjectDetailPage() {
     milestoneId: string,
     action: "request_release" | "release" | "fund" | "dispute"
   ) => {
-    if (!project?.escrow_object_id) return;
+    if (!project?.escrow_object_id || !account?.address) return;
     const ms = milestones.find((m) => m.id === milestoneId);
     if (!ms) return;
+
+    const statusMap: Record<string, string> = {
+      request_release: "release_requested",
+      dispute: "disputed",
+    };
 
     try {
       const params = {
         escrowObjectId: project.escrow_object_id,
-        milestoneIndex: ms.sequence_number,
+        milestoneIndex: ms.sequence_number - 1,
       };
 
+      let result;
       if (action === "request_release") {
-        await requestRelease(params);
+        result = await requestRelease(params);
       } else if (action === "dispute") {
-        await disputeMilestone(params);
+        result = await disputeMilestone(params);
       }
 
-      // Wait for event indexer to sync
-      setTimeout(() => fetchProject(), 3000);
+      const newStatus = statusMap[action];
+      if (newStatus) {
+        // Persist to DB immediately
+        try {
+          await apiFetch(`/api/projects/${id}/milestones`, {
+            method: "PATCH",
+            token: account.address,
+            body: JSON.stringify({
+              milestone_index: ms.sequence_number - 1,
+              status: newStatus,
+              tx_digest: result?.digest ?? null,
+            }),
+          });
+        } catch {
+          // Non-critical
+        }
+      }
+
+      await fetchProject();
     } catch (err) {
       console.error(`Milestone ${action} failed:`, err);
     }

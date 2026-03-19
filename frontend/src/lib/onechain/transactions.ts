@@ -71,10 +71,12 @@ export interface FundMilestoneParams {
   escrowObjectId: string;
   /** 0-based milestone index */
   milestoneIndex: number;
-  /** USDC coin object ID to pay with */
+  /** USDC coin object ID to pay with (ignored if useGasCoin is true) */
   paymentCoinId: string;
   /** Required payment amount in minor units */
   amount: bigint;
+  /** If true, split from the gas coin instead of a separate coin object */
+  useGasCoin?: boolean;
 }
 
 /**
@@ -94,8 +96,9 @@ export interface FundMilestoneParams {
 export function buildFundMilestone(params: FundMilestoneParams): Transaction {
   const tx = new Transaction();
 
-  // Split the exact amount from the provided coin
-  const [paymentCoin] = tx.splitCoins(tx.object(params.paymentCoinId), [
+  // Split the exact amount — use gas coin for native token, or a separate coin object
+  const coinSource = params.useGasCoin ? tx.gas : tx.object(params.paymentCoinId);
+  const [paymentCoin] = tx.splitCoins(coinSource, [
     tx.pure.u64(params.amount),
   ]);
 
