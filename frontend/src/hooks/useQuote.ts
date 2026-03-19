@@ -86,6 +86,36 @@ export function useUpdateQuote(id: string) {
   });
 }
 
+export function useUpdateProject(id: string) {
+  const account = useCurrentAccount();
+  const queryClient = useQueryClient();
+
+  return useMutation<Record<string, unknown>, Error, { title?: string; description?: string; client_name?: string }>({
+    mutationFn: (data) =>
+      apiFetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        token: account?.address,
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", id] });
+    },
+  });
+}
+
+export function useUpdateUserProfile() {
+  const account = useCurrentAccount();
+
+  return useMutation<Record<string, unknown>, Error, { business_name?: string }>({
+    mutationFn: (data) =>
+      apiFetch(`/api/users/me`, {
+        method: "PUT",
+        token: account?.address,
+        body: JSON.stringify(data),
+      }),
+  });
+}
+
 export function useDownloadQuotePdf(id: string) {
   const account = useCurrentAccount();
 

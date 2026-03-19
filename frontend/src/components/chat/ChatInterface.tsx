@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function ChatInterface({ onQuoteAccepted, resumeConversationId }: Props) {
-  const { messages, isLoading, conversationId, latestQuote, sendMessage, loadConversation } = useChat();
+  const { messages, isLoading, conversationId, latestQuote, sendMessage, loadConversation, reset } = useChat();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -20,11 +20,14 @@ export function ChatInterface({ onQuoteAccepted, resumeConversationId }: Props) 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Load existing conversation or reset for a fresh one
   useEffect(() => {
     if (resumeConversationId) {
       loadConversation(resumeConversationId);
+    } else {
+      reset();
     }
-  }, [resumeConversationId, loadConversation]);
+  }, [resumeConversationId, loadConversation, reset]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

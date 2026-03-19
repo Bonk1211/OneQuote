@@ -35,6 +35,10 @@ export function useChat() {
           }),
         });
 
+        // If this is a new conversation (first message), notify sidebar to refresh
+        if (!conversationId && response.conversation_id) {
+          window.dispatchEvent(new CustomEvent("conversation-created"));
+        }
         setConversationId(response.conversation_id);
 
         if (response.parsed_quote) {

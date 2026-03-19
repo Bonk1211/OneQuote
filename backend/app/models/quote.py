@@ -77,7 +77,6 @@ class QuoteUpdate(BaseModel):
         None,
         pattern=r"^(draft|approved|sent|accepted|rejected|expired)$",
     )
-    client_name: Optional[str] = Field(None, max_length=200)
     client_email: Optional[str] = Field(None, max_length=320)
     valid_until: Optional[datetime] = None
     notes: Optional[str] = Field(None, max_length=5000)

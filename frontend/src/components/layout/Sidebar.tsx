@@ -27,8 +27,16 @@ export function Sidebar() {
   const { onechainAddress, signOut } = useAuth();
   const { conversations, fetchConversations } = useConversations();
 
+  // Re-fetch conversations on every route change so new chats appear immediately
   useEffect(() => {
     fetchConversations();
+  }, [fetchConversations, pathname]);
+
+  // Also refresh when a new conversation is created from the chat
+  useEffect(() => {
+    const handler = () => fetchConversations();
+    window.addEventListener("conversation-created", handler);
+    return () => window.removeEventListener("conversation-created", handler);
   }, [fetchConversations]);
 
   const truncated = onechainAddress

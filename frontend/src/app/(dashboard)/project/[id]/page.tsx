@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
-import { useUpdateQuote, useDownloadQuotePdf } from "@/hooks/useQuote";
+import { useUpdateQuote, useUpdateProject, useUpdateUserProfile, useDownloadQuotePdf } from "@/hooks/useQuote";
 import { EscrowStatusBadge } from "@/components/escrow/EscrowStatusBadge";
 import { Dialog } from "@/components/ui/Dialog";
 import { InvoicePreview } from "@/components/quote/InvoicePreview";
@@ -32,6 +32,10 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectWithRelations | null>(null);
   const [editingItems, setEditingItems] = useState<LineItem[]>([]);
   const [editingMilestones, setEditingMilestones] = useState<Milestone[]>([]);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingSummary, setEditingSummary] = useState("");
+  const [editingClientName, setEditingClientName] = useState("");
+  const [editingBusinessName, setEditingBusinessName] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -39,7 +43,17 @@ export default function ProjectDetailPage() {
   const quote = project?.quotes?.[0] ?? null;
   const milestones = project?.milestones ?? [];
   const updateQuote = useUpdateQuote(quote?.id ?? "");
+  const updateProject = useUpdateProject(id ?? "");
+  const updateUserProfile = useUpdateUserProfile();
   const { download: downloadPdf } = useDownloadQuotePdf(quote?.id ?? "");
+
+  // Fetch user profile for business name
+  useEffect(() => {
+    if (!account?.address) return;
+    apiFetch<{ business_name?: string }>("/api/users/me", { token: account.address })
+      .then((u) => setEditingBusinessName(u.business_name ?? ""))
+      .catch(() => {});
+  }, [account?.address]);
 
   const fetchProject = useCallback(async () => {
     if (!account?.address || !id) return;
@@ -50,6 +64,13 @@ export default function ProjectDetailPage() {
       setProject(data);
       if (data.quotes?.[0]) {
         setEditingItems(data.quotes[0].line_items.map((li) => ({ ...li })));
+        setEditingTitle(data.quotes[0].title ?? data.title);
+        setEditingSummary(data.quotes[0].summary ?? data.description ?? "");
+        setEditingClientName(data.client_name ?? "");
+      } else {
+        setEditingTitle(data.title);
+        setEditingSummary(data.description ?? "");
+        setEditingClientName(data.client_name ?? "");
       }
       if (data.milestones) {
         setEditingMilestones(data.milestones.map((ms) => ({ ...ms })));
@@ -113,12 +134,24 @@ export default function ProjectDetailPage() {
       const vatAmount = quote.vat_amount > 0
         ? Math.round(subtotal * (quote.vat_amount / quote.subtotal))
         : 0;
-      await updateQuote.mutateAsync({
-        line_items: editingItems,
-        subtotal,
-        vat_amount: vatAmount,
-        total_amount: subtotal + vatAmount,
-      } as Partial<Quote>);
+      await Promise.all([
+        updateQuote.mutateAsync({
+          title: editingTitle,
+          summary: editingSummary,
+          line_items: editingItems,
+          subtotal,
+          vat_amount: vatAmount,
+          total_amount: subtotal + vatAmount,
+        } as Partial<Quote>),
+        updateProject.mutateAsync({
+          title: editingTitle,
+          description: editingSummary,
+          client_name: editingClientName,
+        }),
+        editingBusinessName
+          ? updateUserProfile.mutateAsync({ business_name: editingBusinessName })
+          : Promise.resolve(),
+      ]);
       setIsEditing(false);
       await fetchProject();
     } catch {
@@ -131,6 +164,9 @@ export default function ProjectDetailPage() {
   const handleCancel = () => {
     if (quote) {
       setEditingItems(quote.line_items.map((li) => ({ ...li })));
+      setEditingTitle(quote.title ?? project?.title ?? "");
+      setEditingSummary(quote.summary ?? project?.description ?? "");
+      setEditingClientName(project?.client_name ?? "");
     }
     setEditingMilestones(milestones.map((ms) => ({ ...ms })));
     setIsEditing(false);
@@ -154,11 +190,31 @@ export default function ProjectDetailPage() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{project.title}</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            {project.description || "No description"} &middot;{" "}
-            {project.estimated_duration_days} days
-          </p>
+          {isEditing ? (
+            <input
+              type="text"
+              value={editingTitle}
+              onChange={(e) => setEditingTitle(e.target.value)}
+              className="text-2xl font-bold bg-transparent border-b border-indigo-500 text-white focus:outline-none w-full"
+              placeholder="Project title"
+            />
+          ) : (
+            <h1 className="text-2xl font-bold">{project.title}</h1>
+          )}
+          {isEditing ? (
+            <textarea
+              value={editingSummary}
+              onChange={(e) => setEditingSummary(e.target.value)}
+              rows={2}
+              className="mt-2 w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 focus:border-indigo-500 focus:outline-none resize-none"
+              placeholder="Project description / summary"
+            />
+          ) : (
+            <p className="mt-1 text-sm text-zinc-400">
+              {project.description || "No description"} &middot;{" "}
+              {project.estimated_duration_days} days
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <EscrowStatusBadge status={project.status} type="project" />
@@ -227,6 +283,50 @@ export default function ProjectDetailPage() {
           Download PDF
         </button>
       </div>
+
+      {/* Invoice Details: Billed By / Billed To */}
+      {isEditing && (
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              Billed By (Business Name)
+            </label>
+            <input
+              type="text"
+              value={editingBusinessName}
+              onChange={(e) => setEditingBusinessName(e.target.value)}
+              className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              placeholder="Your business name"
+            />
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              Billed To (Client Name)
+            </label>
+            <input
+              type="text"
+              value={editingClientName}
+              onChange={(e) => setEditingClientName(e.target.value)}
+              className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              placeholder="Client name"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Non-editing view of billing info */}
+      {!isEditing && (
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Billed By</p>
+            <p className="mt-1 text-sm font-medium text-white">{editingBusinessName || "QuoteGuard"}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Billed To</p>
+            <p className="mt-1 text-sm font-medium text-white">{project.client_name || "—"}</p>
+          </div>
+        </div>
+      )}
 
       {/* Line Items */}
       <div className="mb-6">
@@ -427,6 +527,10 @@ export default function ProjectDetailPage() {
         displayVat={displayVat}
         displayTotal={displayTotal}
         milestones={milestones}
+        editingTitle={editingTitle}
+        editingSummary={editingSummary}
+        editingClientName={editingClientName}
+        editingBusinessName={editingBusinessName}
       />
     </div>
   );
@@ -445,6 +549,10 @@ function InvoicePreviewOverlay({
   displayVat,
   displayTotal,
   milestones,
+  editingTitle,
+  editingSummary,
+  editingClientName,
+  editingBusinessName,
 }: {
   show: boolean;
   onClose: () => void;
@@ -456,6 +564,10 @@ function InvoicePreviewOverlay({
   displayVat: number;
   displayTotal: number;
   milestones: Milestone[];
+  editingTitle: string;
+  editingSummary: string;
+  editingClientName: string;
+  editingBusinessName: string;
 }) {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -608,11 +720,11 @@ function InvoicePreviewOverlay({
 
             {quote && (
               <InvoicePreview
-                title={quote.title}
-                summary={quote.summary ?? ""}
+                title={editingTitle || quote.title}
+                summary={editingSummary || (quote.summary ?? "")}
                 quoteId={quote.id}
-                businessName=""
-                clientName={project.client_name ?? ""}
+                businessName={editingBusinessName}
+                clientName={editingClientName || (project.client_name ?? "")}
                 currency={quote.currency_code}
                 lineItems={displayItems}
                 subtotal={displaySubtotal}
