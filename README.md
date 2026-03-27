@@ -243,4 +243,4 @@ See [TRANSACTION_SETUP.md](./TRANSACTION_SETUP.md) for full contract details, ev
 
 ## Team
 
-Built at OneHack 3.0.
+Built by Bonk.
