@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatCurrency(
   amountMinorUnits: number,
-  currency: string = "GBP"
+  currency: string = "USD"
 ): string {
   const amount = amountMinorUnits / 100;
   const symbol = { GBP: "\u00a3", USD: "$", EUR: "\u20ac" }[currency] || currency;

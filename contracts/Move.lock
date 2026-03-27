@@ -2,7 +2,24 @@
 # This file should be checked in.
 
 [move]
-version = 4
+version = 3
+manifest_digest = "890FD8C2D8310F6F0B9C1CF41C2155574E5C643E17592091220383940385FAA1"
+deps_digest = "F8BBB0CCB2491CA29A3DF03D6F92277A4F3574266507ACD77214D37ECA3F3082"
+dependencies = [
+  { id = "One", name = "One" },
+]
+
+[[move.package]]
+id = "MoveStdlib"
+source = { local = "/Users/limjiale/.move/https___github_com_one-chain-labs_onechain_git_main/crates/sui-framework/packages/move-stdlib" }
+
+[[move.package]]
+id = "One"
+source = { local = "/Users/limjiale/.move/https___github_com_one-chain-labs_onechain_git_main/crates/sui-framework/packages/one-framework" }
+
+dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
+]
 
 [pinned.testnet.MoveStdlib]
 source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "16bf4d124ac5d9fbe9314552d02cfdf55e30d377" }

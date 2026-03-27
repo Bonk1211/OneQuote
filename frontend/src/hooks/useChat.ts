@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { apiFetch } from "@/lib/api";
 import type { ChatMessage, ChatApiResponse, Conversation, ConversationDetail } from "@/types/quote";
@@ -205,6 +205,25 @@ export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const account = useCurrentAccount();
+  const prevAddressRef = useRef<string | undefined>(undefined);
+
+  // Clear conversations and re-fetch when wallet account changes
+  useEffect(() => {
+    const currentAddress = account?.address;
+    if (prevAddressRef.current !== currentAddress) {
+      prevAddressRef.current = currentAddress;
+      setConversations([]);
+      if (currentAddress) {
+        setIsLoading(true);
+        apiFetch<Conversation[]>("/api/chat/conversations", {
+          token: currentAddress,
+        })
+          .then(setConversations)
+          .catch(() => {})
+          .finally(() => setIsLoading(false));
+      }
+    }
+  }, [account?.address]);
 
   const fetchConversations = useCallback(async () => {
     if (!account?.address) return;

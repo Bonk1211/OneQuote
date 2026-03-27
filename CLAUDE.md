@@ -13,6 +13,8 @@ QuoteGuard is a freemium SaaS for solo contractors/tradespeople. An AI conversat
 make dev              # Starts Supabase, backend (port 8000), frontend (port 3000) concurrently
 make dev-frontend     # Next.js only
 make dev-backend      # FastAPI only (uvicorn --reload)
+make dev-supabase     # Supabase only
+make stop             # Stop all services
 ```
 
 ### Build & lint
@@ -27,12 +29,14 @@ cd backend && python3 -m pytest tests/ -v   # Backend tests
 ```bash
 make db-reset         # Reset Supabase DB (all migrations + seed)
 make db-migrate       # Run pending migrations
+make db-seed          # Run seed file only
 ```
 
 ### Install dependencies
 ```bash
 make install          # Installs both npm and pip deps
 make env              # Creates .env files from .env.example templates
+make clean            # Remove build artifacts and caches
 ```
 
 ## Architecture
@@ -62,7 +66,7 @@ make env              # Creates .env files from .env.example templates
 - **`WalletAuthMiddleware`**: Extracts wallet address from Bearer header into `request.state.wallet_address`. Routes use the `get_current_user` dependency for full user resolution.
 - **Supabase access**: Backend uses the **service role key** (bypasses RLS). Two clients: `get_supabase()` (service role) and `get_supabase_anon()` (anon key).
 - **Event indexer**: Runs as `asyncio.create_task` in FastAPI lifespan. Polls OneChain RPC every 5s for escrow events, idempotently inserts into `escrow_events`, and updates milestone/project statuses.
-- **AI quoting pipeline** (`POST /api/chat/quote`): Fetches user overheads → builds LLM prompt with financial context → calls OpenAI GPT-4o → parses JSON from response → runs profitability engine → stores project+quote+milestones → returns analysis.
+- **AI quoting pipeline** (`POST /api/chat/quote`): Fetches user overheads → searches real-time market rates via Tavily → builds LLM prompt with financial context → calls Google Gemini (`gemini-3.1-pro-preview` via `google-genai`) → parses JSON from response → runs profitability engine → stores project+quote+milestones → streams SSE events to frontend.
 
 ### Smart Contracts (Move on OneChain)
 - `contracts/sources/escrow.move`: Generic `Escrow<T>` shared object with milestone-based OCT deposits.
@@ -71,9 +75,9 @@ make env              # Creates .env files from .env.example templates
 - **Gas sponsorship**: Platform hot wallet co-signs gas; user signs sender portion via OneWallet. Combined and submitted by the backend.
 
 ### Database (Supabase PostgreSQL)
-- 6 main tables: `users`, `base_overheads`, `projects`, `quotes`, `milestones`, `escrow_events`.
+- Main tables: `users`, `base_overheads`, `projects`, `quotes`, `milestones`, `escrow_events`, `indexer_cursors`, `conversations`, `chat_messages`.
 - `base_overheads` has generated columns: `total_monthly_overheads`, `total_annual_overheads`, `billable_days_per_year`.
-- `quotes.line_items` is JSONB. Monetary values stored in **minor units** (pence/cents).
+- `quotes.line_items` is JSONB. Monetary values stored in **minor units** (cents). Default display currency is USD.
 - Enum types: `project_status` (8 states), `quote_status` (7 states), `milestone_status` (7 states).
 - RLS policies exist but backend bypasses them via service role key.
 - Realtime enabled on `milestones`, `projects`, `escrow_events`.
@@ -87,7 +91,7 @@ details.
 ## Key Conventions
 
 - **Path alias**: Frontend uses `@/*` → `./src/*`.
-- **All monetary values** in the backend and database are in minor units (pence/cents). The frontend converts for display (`formatCurrency` in `lib/utils.ts`).
+- **All monetary values** in the backend and database are in minor units (cents). The frontend converts for display (`formatCurrency` in `lib/utils.ts`, default USD).
 - **Profitability fields** on quotes (break_even_amount, profit_margin_percent, min_daily_rate, etc.) are computed by `services/profitability.py` and stored denormalized.
 - Backend routers reference `str(user.id)` for Supabase queries — `AuthenticatedUser.id` is already a string UUID.
-- The `escrow` router endpoints currently return 501 (placeholder) — awaiting OneChain SDK finalization.
+- **Escrow**: Backend `/api/escrow/*` endpoints return 501 (placeholder), but escrow functionality works client-side via `useEscrow` hook and `lib/onechain/transactions.ts`. See `TRANSACTION_SETUP.md` for OneChain contract details.
