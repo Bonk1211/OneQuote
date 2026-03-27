@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense } from "react";
 import { ChatInterface } from "@/components/chat/ChatInterface";
 
-export default function NewQuotePage() {
+function NewQuoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const resumeId = searchParams.get("conversation");
@@ -30,5 +30,13 @@ export default function NewQuotePage() {
         />
       </div>
     </div>
+  );
+}
+
+export default function NewQuotePage() {
+  return (
+    <Suspense>
+      <NewQuoteContent />
+    </Suspense>
   );
 }
