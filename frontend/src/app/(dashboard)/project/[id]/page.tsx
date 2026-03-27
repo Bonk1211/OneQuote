@@ -935,12 +935,13 @@ function InvoicePreviewOverlay({
             <div
               className="sticky top-0 z-10 h-[2px] w-full"
               style={{
-                background: visible
+                backgroundImage: visible
                   ? "linear-gradient(90deg, transparent, rgba(79,70,229,0.6), rgba(124,58,237,0.6), transparent)"
-                  : "transparent",
+                  : "none",
+                backgroundColor: visible ? "transparent" : "transparent",
                 backgroundSize: "200% 100%",
                 animation: visible ? "invoiceShimmer 3s linear infinite" : "none",
-                transition: "background 0.3s ease",
+                transition: "background-image 0.3s ease",
               }}
             />
 
