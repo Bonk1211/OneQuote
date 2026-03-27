@@ -1,5 +1,5 @@
 [package]
-name = "QuoteGuardEscrow"
+name = "OneQuoteEscrow"
 edition = "2024.beta"
 
 [dependencies]

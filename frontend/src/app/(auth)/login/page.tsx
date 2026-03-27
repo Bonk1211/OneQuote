@@ -17,7 +17,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-950">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center">
         <h1 className="text-3xl font-bold text-white">
-          Quote<span className="text-indigo-400">Guard</span>
+          One<span className="text-indigo-400">Quote</span>
         </h1>
         <p className="mt-2 text-sm text-zinc-400">
           AI-powered profitability checking for your quotes

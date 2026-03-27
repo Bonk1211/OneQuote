@@ -495,7 +495,7 @@ export default function ProjectDetailPage() {
         <div className="mb-6 grid grid-cols-2 gap-4">
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Billed By</p>
-            <p className="mt-1 text-sm font-medium text-white">{editingBusinessName || "QuoteGuard"}</p>
+            <p className="mt-1 text-sm font-medium text-white">{editingBusinessName || "OneQuote"}</p>
           </div>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Billed To</p>

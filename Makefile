@@ -2,7 +2,7 @@
        build test test-backend test-frontend lint clean env
 
 # ──────────────────────────────────────────────
-# QuoteGuard — Development Commands
+# OneQuote — Development Commands
 # ──────────────────────────────────────────────
 
 help: ## Show this help

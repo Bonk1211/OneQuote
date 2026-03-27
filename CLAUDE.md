@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QuoteGuard is a freemium SaaS for solo contractors/tradespeople. An AI conversational interface parses project descriptions into profitability-checked quotes, which can then be locked into milestone-based escrow smart contracts on OneChain (a Sui-fork L1). Users interact via a browser wallet (OneWallet / @mysten/dapp-kit); they never touch crypto directly thanks to gas sponsorship.
+OneQuote is a freemium SaaS for solo contractors/tradespeople. An AI conversational interface parses project descriptions into profitability-checked quotes, which can then be locked into milestone-based escrow smart contracts on OneChain (a Sui-fork L1). Users interact via a browser wallet (OneWallet / @mysten/dapp-kit); they never touch crypto directly thanks to gas sponsorship.
 
 ## Commands
 

@@ -131,7 +131,7 @@ export function useDownloadQuotePdf(id: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `QuoteGuard-${id.slice(0, 8).toUpperCase()}.pdf`;
+    a.download = `OneQuote-${id.slice(0, 8).toUpperCase()}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

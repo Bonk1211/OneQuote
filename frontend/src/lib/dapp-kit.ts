@@ -9,7 +9,7 @@ const { networkConfig } = createNetworkConfig({
   },
 });
 
-/** Dark theme matching the QuoteGuard zinc/indigo design system */
+/** Dark theme matching the OneQuote zinc/indigo design system */
 const darkTheme: typeof lightTheme = {
   blurs: {
     modalOverlay: "blur(0)",

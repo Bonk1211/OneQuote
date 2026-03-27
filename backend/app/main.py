@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
         logger.info("Event indexer background task stopped")
 
 
-app = FastAPI(title="QuoteGuard API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="OneQuote API", version="0.1.0", lifespan=lifespan)
 
 # Middleware is applied in reverse order (last added = first executed)
 app.add_middleware(

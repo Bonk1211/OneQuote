@@ -47,7 +47,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-950 px-4 py-6">
       <div className="mb-8 px-2">
         <h1 className="text-xl font-bold text-white">
-          Quote<span className="text-indigo-400">Guard</span>
+          One<span className="text-indigo-400">Quote</span>
         </h1>
         <p className="mt-1 text-xs text-zinc-500">Profitable quoting, guaranteed</p>
       </div>

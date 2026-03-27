@@ -14,7 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QuoteGuard - Profitable Quoting, Guaranteed",
+  title: "OneQuote - Profitable Quoting, Guaranteed",
   description:
     "AI-powered profitability checking for contractor quotes with guaranteed payment via smart contract escrow.",
 };

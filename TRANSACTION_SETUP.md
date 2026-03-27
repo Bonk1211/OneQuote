@@ -1,6 +1,6 @@
 # Transaction Setup Guide
 
-End-to-end guide to get QuoteGuard escrow transactions running on OneChain testnet.
+End-to-end guide to get OneQuote escrow transactions running on OneChain testnet.
 
 ## Deployed Contract
 

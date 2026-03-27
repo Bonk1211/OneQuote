@@ -210,7 +210,7 @@ export default function ClientPaymentPage() {
     <div className="min-h-screen bg-zinc-950">
       <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
         <h1 className="text-xl font-bold text-white">
-          Quote<span className="text-indigo-400">Guard</span>
+          One<span className="text-indigo-400">Quote</span>
           <span className="ml-2 text-sm font-normal text-zinc-500">Payment Portal</span>
         </h1>
         <ConnectButton />

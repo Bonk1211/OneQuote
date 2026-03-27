@@ -8,7 +8,7 @@ export default function LandingPage() {
       <header className="border-b border-zinc-800 px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <h1 className="text-xl font-bold text-white">
-            Quote<span className="text-indigo-400">Guard</span>
+            One<span className="text-indigo-400">Quote</span>
           </h1>
           <Link
             href="/login"

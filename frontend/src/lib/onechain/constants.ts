@@ -3,7 +3,7 @@
  * All values are read from environment variables at build time.
  */
 
-/** Published Move package ID for the QuoteGuard escrow contract */
+/** Published Move package ID for the OneQuote escrow contract */
 export const PACKAGE_ID =
   process.env.NEXT_PUBLIC_ESCROW_PACKAGE_ID ?? "";
 

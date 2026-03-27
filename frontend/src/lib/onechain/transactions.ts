@@ -1,5 +1,5 @@
 /**
- * Transaction builders for the QuoteGuard escrow contract.
+ * Transaction builders for the OneQuote escrow contract.
  *
  * Uses the @mysten/sui Transaction API (SDK 2.x) to construct
  * programmable transaction blocks for each escrow entry function.

@@ -1,4 +1,4 @@
-# QuoteGuard
+# OneQuote
 
 **AI-powered quoting with on-chain escrow for solo contractors and tradespeople.**
 
@@ -14,7 +14,7 @@ Even when the price is right, getting paid is another battle. Clients delay, dis
 
 ## The Solution
 
-QuoteGuard is a conversational AI copilot that turns a plain-English project description into a **profitability-checked quote** — then locks payment into **milestone-based smart contract escrow** on OneChain so both sides are protected.
+OneQuote is a conversational AI copilot that turns a plain-English project description into a **profitability-checked quote** — then locks payment into **milestone-based smart contract escrow** on OneChain so both sides are protected.
 
 **For contractors**: Describe the job ("bathroom remodel, 5 days, $1,200 in materials"), and the AI generates a line-item quote that accounts for your real overheads — insurance, tools, tax, desired salary, profit margin. You'll see instantly whether the quote is above or below your break-even point before you send it.
 

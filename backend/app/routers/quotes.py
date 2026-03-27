@@ -194,7 +194,7 @@ async def download_quote_pdf(
         )
 
     # 7. Return the PDF
-    filename = f"QuoteGuard-{quote_id[:8].upper()}.pdf"
+    filename = f"OneQuote-{quote_id[:8].upper()}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
